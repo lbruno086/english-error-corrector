@@ -68,9 +68,9 @@
 <div class="main">
   <aside class="sidebar">
     <div>
-      <div class="section-label">DeepSeek API Key</div>
+      <div class="section-label">OpenAI API Key</div>
       <div class="api-row"><input type="password" id="api-key" placeholder="sk-..." autocomplete="off" /></div>
-      <p style="font-size:.72rem;color:var(--text-muted);margin-top:6px;">Your key is never sent anywhere except directly to api.deepseek.com</p>
+      <p style="font-size:.72rem;color:var(--text-muted);margin-top:6px;">Your key is used only for the request to api.openai.com in this browser session</p>
     </div>
     <div>
       <div class="section-label">Image</div>
@@ -94,7 +94,7 @@
       <h2>No analysis yet</h2>
       <p>Enter your API key, upload an image with English text, then click <strong>Analyze Errors</strong>.</p>
     </div>
-    <div class="loader" id="loader"><div class="spinner"></div><p>Analyzing image with Claude…</p></div>
+    <div class="loader" id="loader"><div class="spinner"></div><p>Analyzing image with OpenAI...</p></div>
     <div class="alert" id="error-alert"></div>
     <div class="result-box" id="result-box">
       <div><div class="result-title">Annotated Text</div><div class="annotated-text" id="annotated-text"></div></div>
@@ -104,7 +104,7 @@
   </main>
 </div>
 <script>
-const E={G:{label:"Grammar",color:"#E53935"},S:{label:"Spelling",color:"#FB8C00"},P:{label:"Punctuation",color:"#1E88E5"},VT:{label:"Verb Tense",color:"#8E24AA"},L:{label:"Lexical",color:"#00897B"},O:{label:"Omission",color:"#D81B60"},WO:{label:"Word Order",color:"#00ACC1"},EX:{label:"Extra Word",color:"#9E9D24"}};
+const E={G:{label:"Grammar",color:"#E53935"},S:{label:"Spelling",color:"#FB8C00"},P:{label:"Punctuation",color:"#1E88E5"},VT:{label:"Verb Tense",color:"#8E24AA"},L:{label:"Lexical",color:"#00897B"},O:{label:"Omission",color:"#D81B60"},WO:{label:"Word Order",color:"#00ACC1"},E:{label:"Extra Word",color:"#9E9D24"}};
 const ERROR_TYPES=E;
 const SP=`You are an expert English language corrector. Analyze the text in the image and identify ALL errors.
 
@@ -142,8 +142,6 @@ Object.entries(ERROR_TYPES).forEach(([c,i])=>{legendEl.innerHTML+=`<div class="l
 
 const fileInput=document.getElementById("file-input"),dropZone=document.getElementById("drop-zone"),previewImg=document.getElementById("preview-img"),fileNameEl=document.getElementById("file-name"),analyzeBtn=document.getElementById("analyze-btn"),apiKeyEl=document.getElementById("api-key");
 let selectedFile=null;
-const savedKey=localStorage.getItem("deepseek_key");
-if(savedKey)apiKeyEl.value=savedKey;
 apiKeyEl.addEventListener("input",updateBtn);
 function handleFile(f){if(!f||!f.type.startsWith("image/"))return;selectedFile=f;fileNameEl.textContent=f.name;previewImg.src=URL.createObjectURL(f);previewImg.style.display="block";updateBtn();}
 function updateBtn(){analyzeBtn.disabled=!(selectedFile&&apiKeyEl.value.trim());}
@@ -155,15 +153,79 @@ analyzeBtn.addEventListener("click",analyze);
 
 async function analyze(){
   const apiKey=apiKeyEl.value.trim();
-  localStorage.setItem("deepseek_key",apiKey);
   setView("loader");
   try{
-    const b64=await toBase64(selectedFile);
-    const body={model:"deepseek-chat",max_tokens:4096,system:SP,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:selectedFile.type,data:b64}},{type:"text",text:"Analyze this text for English errors and return the JSON."}]}]};
-    const resp=await fetch("https://api.deepseek.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","Authorization": "Bearer " + apiKey},body:JSON.stringify(body)});
+    const imageUrl=await toDataUrl(selectedFile);
+    const body={
+      model:"gpt-4.1",
+      instructions:SP,
+      input:[{
+        role:"user",
+        content:[
+          {type:"input_text",text:"Read the English text in this image and return the structured correction JSON."},
+          {type:"input_image",image_url:imageUrl,detail:"high"}
+        ]
+      }],
+      text:{
+        format:{
+          type:"json_schema",
+          name:"english_error_analysis",
+          strict:true,
+          schema:{
+            type:"object",
+            additionalProperties:false,
+            properties:{
+              original_text:{type:"string"},
+              tokens:{
+                type:"array",
+                items:{
+                  type:"object",
+                  additionalProperties:false,
+                  properties:{
+                    text:{type:"string"},
+                    error:{
+                      anyOf:[
+                        {type:"null"},
+                        {
+                          type:"object",
+                          additionalProperties:false,
+                          properties:{
+                            type:{type:"string",enum:["G","S","P","VT","L","WO","E"]},
+                            correction:{type:"string"},
+                            explanation:{type:"string"}
+                          },
+                          required:["type","correction","explanation"]
+                        }
+                      ]
+                    }
+                  },
+                  required:["text","error"]
+                }
+              },
+              omissions:{
+                type:"array",
+                items:{
+                  type:"object",
+                  additionalProperties:false,
+                  properties:{
+                    after_token_index:{type:"integer"},
+                    text:{type:"string"},
+                    explanation:{type:"string"}
+                  },
+                  required:["after_token_index","text","explanation"]
+                }
+              }
+            },
+            required:["original_text","tokens","omissions"]
+          }
+        }
+      },
+      max_output_tokens:4096
+    };
+    const resp=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},body:JSON.stringify(body)});
     if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err.error?.message||"HTTP "+resp.status);}
     const data=await resp.json();
-    let raw=data.choices[0].message.content.trim();
+    let raw=extractOutputText(data).trim();
     if(raw.startsWith("```")){const lines=raw.split("\n");raw=lines.slice(1,lines[lines.length-1].trim()==="```"?-1:undefined).join("\n");}
     renderResult(JSON.parse(raw));setView("result");
   }catch(err){showError(err.message);}
@@ -215,7 +277,11 @@ function setView(view){
   document.getElementById("result-box").style.display=view==="result"?"flex":"none";
 }
 function showError(msg){const el=document.getElementById("error-alert");el.textContent="Error: "+msg;setView("error");}
-function toBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});}
+function extractOutputText(data){
+  if(data.output_text)return data.output_text;
+  return (data.output||[]).flatMap(item=>item.content||[]).map(part=>part.text||"").join("");
+}
+function toDataUrl(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 </script>
 </body>
 </html>
