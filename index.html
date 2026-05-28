@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>English Error Corrector</title>
+  <style>
+    :root { --bg:#0f1117;--surface:#1a1d27;--surface2:#252836;--border:#2e3148;--text:#e8eaf6;--text-muted:#7986cb;--accent:#5c6bc0;--accent-hover:#7986cb;--G:#E53935;--S:#FB8C00;--P:#1E88E5;--VT:#8E24AA;--L:#00897B;--O:#D81B60;--WO:#00ACC1;--E:#9E9D24; }
+    * { box-sizing:border-box;margin:0;padding:0; }
+    body { background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column; }
+    header { background:var(--surface);border-bottom:1px solid var(--border);padding:16px 32px;display:flex;align-items:center;gap:14px; }
+    header .logo { font-size:1.5rem; }
+    header h1 { font-size:1.2rem;font-weight:700;letter-spacing:-.3px; }
+    header p { font-size:0.78rem;color:var(--text-muted);margin-top:2px; }
+    .main { flex:1;display:grid;grid-template-columns:340px 1fr;gap:0; }
+    .sidebar { background:var(--surface);border-right:1px solid var(--border);padding:24px 20px;display:flex;flex-direction:column;gap:20px;overflow-y:auto; }
+    .section-label { font-size:0.68rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px; }
+    .api-row { display:flex;gap:8px; }
+    input[type="password"],input[type="text"] { flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.82rem;padding:9px 12px;outline:none;transition:border-color .2s; }
+    input:focus { border-color:var(--accent); }
+    .drop-zone { border:2px dashed var(--border);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative; }
+    .drop-zone:hover,.drop-zone.over { border-color:var(--accent);background:rgba(92,107,192,.06); }
+    .drop-zone input[type="file"] { position:absolute;inset:0;opacity:0;cursor:pointer; }
+    .drop-zone .icon { font-size:2rem;margin-bottom:8px; }
+    .drop-zone p { font-size:0.82rem;color:var(--text-muted);line-height:1.5; }
+    .drop-zone .file-name { margin-top:10px;font-size:0.78rem;color:var(--accent-hover);font-weight:600;word-break:break-all; }
+    #preview-img { width:100%;border-radius:10px;border:1px solid var(--border);display:none;object-fit:contain;max-height:220px; }
+    button.analyze-btn { background:var(--accent);border:none;border-radius:10px;color:#fff;cursor:pointer;font-size:0.92rem;font-weight:700;padding:13px;width:100%;transition:background .2s,transform .1s; }
+    button.analyze-btn:hover:not(:disabled) { background:var(--accent-hover); }
+    button.analyze-btn:active:not(:disabled) { transform:scale(.98); }
+    button.analyze-btn:disabled { opacity:.5;cursor:not-allowed; }
+    .legend { display:flex;flex-direction:column;gap:7px; }
+    .legend-item { display:flex;align-items:center;gap:10px;font-size:0.82rem; }
+    .legend-chip { width:32px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.68rem;font-weight:800;color:#fff;flex-shrink:0; }
+    .content { padding:32px;overflow-y:auto;display:flex;flex-direction:column;gap:24px; }
+    .placeholder { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--text-muted);text-align:center; }
+    .placeholder .big { font-size:3.5rem; }
+    .placeholder h2 { font-size:1.1rem;font-weight:600;color:var(--text); }
+    .placeholder p { font-size:0.85rem;max-width:360px;line-height:1.6; }
+    .loader { display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;flex:1; }
+    .spinner { width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .loader p { color:var(--text-muted);font-size:0.88rem; }
+    .result-box { display:none;flex-direction:column;gap:24px; }
+    .result-title { font-size:0.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px; }
+    .annotated-text { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;font-size:1.05rem;line-height:2.4;letter-spacing:.2px; }
+    .token-error { position:relative;display:inline;border-radius:3px;padding:0 1px; }
+    .token-error .abbr-tag { position:absolute;top:-1.35em;left:0;font-size:0.58rem;font-weight:800;line-height:1;white-space:nowrap;letter-spacing:.3px; }
+    .stats { display:flex;flex-wrap:wrap;gap:10px; }
+    .stat-pill { background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:0.78rem;display:flex;align-items:center;gap:7px; }
+    .stat-dot { width:9px;height:9px;border-radius:50%;flex-shrink:0; }
+    .error-list { display:flex;flex-direction:column;gap:8px; }
+    .error-card { background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;gap:14px;align-items:flex-start; }
+    .error-card .type-badge { flex-shrink:0;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;color:#fff; }
+    .error-card .err-detail { flex:1; }
+    .error-card .err-original { font-size:0.88rem;font-weight:600;text-decoration:line-through;opacity:.7; }
+    .error-card .err-correction { font-size:0.88rem;font-weight:700;margin-top:2px; }
+    .error-card .err-explanation { font-size:0.76rem;color:var(--text-muted);margin-top:3px; }
+    .alert { background:rgba(229,57,53,.12);border:1px solid rgba(229,57,53,.3);border-radius:10px;padding:14px 18px;font-size:0.85rem;color:#ef9a9a;display:none; }
+    @media (max-width:700px) { .main { grid-template-columns:1fr; } .sidebar { border-right:none;border-bottom:1px solid var(--border); } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">📝</div>
+  <div><h1>English Error Corrector</h1><p>Upload a photo of any English text — AI will detect and color-code every error</p></div>
+</header>
+<div class="main">
+  <aside class="sidebar">
+    <div>
+      <div class="section-label">Anthropic API Key</div>
+      <div class="api-row"><input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off" /></div>
+      <p style="font-size:.72rem;color:var(--text-muted);margin-top:6px;">Your key is never sent anywhere except directly to api.anthropic.com</p>
+    </div>
+    <div>
+      <div class="section-label">Image</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*" />
+        <div class="icon">📷</div>
+        <p>Drag &amp; drop a photo<br/>or click to browse</p>
+        <div class="file-name" id="file-name"></div>
+      </div>
+      <img id="preview-img" alt="preview" />
+    </div>
+    <button class="analyze-btn" id="analyze-btn" disabled>Analyze Errors</button>
+    <div>
+      <div class="section-label">Error Legend</div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </aside>
+  <main class="content" id="content">
+    <div class="placeholder" id="placeholder">
+      <div class="big">🔍</div>
+      <h2>No analysis yet</h2>
+      <p>Enter your API key, upload an image with English text, then click <strong>Analyze Errors</strong>.</p>
+    </div>
+    <div class="loader" id="loader"><div class="spinner"></div><p>Analyzing image with Claude…</p></div>
+    <div class="alert" id="error-alert"></div>
+    <div class="result-box" id="result-box">
+      <div><div class="result-title">Annotated Text</div><div class="annotated-text" id="annotated-text"></div></div>
+      <div><div class="result-title">Error Summary</div><div class="stats" id="stats"></div></div>
+      <div><div class="result-title">Error Details</div><div class="error-list" id="error-list"></div></div>
+    </div>
+  </main>
+</div>
+<script>
+const E={G:{label:"Grammar",color:"#E53935"},S:{label:"Spelling",color:"#FB8C00"},P:{label:"Punctuation",color:"#1E88E5"},VT:{label:"Verb Tense",color:"#8E24AA"},L:{label:"Lexical",color:"#00897B"},O:{label:"Omission",color:"#D81B60"},WO:{label:"Word Order",color:"#00ACC1"},EX:{label:"Extra Word",color:"#9E9D24"}};
+const ERROR_TYPES=E;
+const SP=`You are an expert English language corrector. Analyze the text in the image and identify ALL errors.
+
+Error types:
+- G  = Grammar (wrong grammatical structure)
+- S  = Spelling (misspelled word)
+- P  = Punctuation (missing or wrong punctuation)
+- VT = Verb Tense (wrong tense)
+- L  = Lexical (wrong word choice)
+- O  = Omission (missing word)
+- WO = Word Order (words in wrong sequence)
+- E  = Extra Word (word that should not be there)
+
+Return ONLY valid JSON in this exact format, no markdown:
+{
+  "original_text": "full original text exactly as written",
+  "tokens": [
+    {"text": "word", "error": null},
+    {"text": "misspeled", "error": {"type": "S", "correction": "misspelled", "explanation": "Incorrect spelling"}}
+  ],
+  "omissions": [
+    {"after_token_index": 3, "text": "missing_word", "explanation": "The article the is missing"}
+  ]
+}
+
+Rules:
+- Every word and punctuation mark is a separate token
+- Spaces between tokens are handled automatically
+- Omissions use after_token_index to indicate where the missing word belongs
+- Be exhaustive: catch every single error
+- Return ONLY the JSON object, nothing else`;
+
+const legendEl=document.getElementById("legend");
+Object.entries(ERROR_TYPES).forEach(([c,i])=>{legendEl.innerHTML+=`<div class="legend-item"><div class="legend-chip" style="background:${i.color}">${c}</div><span>${i.label}</span></div>`;});
+
+const fileInput=document.getElementById("file-input"),dropZone=document.getElementById("drop-zone"),previewImg=document.getElementById("preview-img"),fileNameEl=document.getElementById("file-name"),analyzeBtn=document.getElementById("analyze-btn"),apiKeyEl=document.getElementById("api-key");
+let selectedFile=null;
+const savedKey=localStorage.getItem("anthropic_key");
+if(savedKey)apiKeyEl.value=savedKey;
+apiKeyEl.addEventListener("input",updateBtn);
+function handleFile(f){if(!f||!f.type.startsWith("image/"))return;selectedFile=f;fileNameEl.textContent=f.name;previewImg.src=URL.createObjectURL(f);previewImg.style.display="block";updateBtn();}
+function updateBtn(){analyzeBtn.disabled=!(selectedFile&&apiKeyEl.value.trim());}
+fileInput.addEventListener("change",()=>handleFile(fileInput.files[0]));
+dropZone.addEventListener("dragover",e=>{e.preventDefault();dropZone.classList.add("over");});
+dropZone.addEventListener("dragleave",()=>dropZone.classList.remove("over"));
+dropZone.addEventListener("drop",e=>{e.preventDefault();dropZone.classList.remove("over");handleFile(e.dataTransfer.files[0]);});
+analyzeBtn.addEventListener("click",analyze);
+
+async function analyze(){
+  const apiKey=apiKeyEl.value.trim();
+  localStorage.setItem("anthropic_key",apiKey);
+  setView("loader");
+  try{
+    const b64=await toBase64(selectedFile);
+    const body={model:"claude-opus-4-6",max_tokens:4096,system:SP,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:selectedFile.type,data:b64}},{type:"text",text:"Analyze this text for English errors and return the JSON."}]}]};
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(body)});
+    if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err.error?.message||"HTTP "+resp.status);}
+    const data=await resp.json();
+    let raw=data.content[0].text.trim();
+    if(raw.startsWith("```")){const lines=raw.split("\n");raw=lines.slice(1,lines[lines.length-1].trim()==="```"?-1:undefined).join("\n");}
+    renderResult(JSON.parse(raw));setView("result");
+  }catch(err){showError(err.message);}
+}
+
+function renderResult(data){
+  const{tokens=[],omissions=[]}=data;
+  const annotated=document.getElementById("annotated-text");
+  annotated.innerHTML="";
+  const errors=[];
+  tokens.forEach((tok,i)=>{
+    omissions.filter(o=>o.after_token_index===i-1).forEach(o=>{annotated.appendChild(makeOmissionSpan(o));errors.push({type:"O",original:"(missing)",correction:o.text,explanation:o.explanation});});
+    if(i>0)annotated.appendChild(document.createTextNode(" "));
+    if(tok.error){
+      const info=ERROR_TYPES[tok.error.type]||{color:"#aaa"};
+      const wrap=document.createElement("span");wrap.className="token-error";wrap.style.cssText="color:"+info.color+";border-bottom:2px solid "+info.color+";";
+      const abbr=document.createElement("span");abbr.className="abbr-tag";abbr.style.color=info.color;abbr.textContent=tok.error.type;
+      wrap.appendChild(abbr);wrap.appendChild(document.createTextNode(tok.text));
+      wrap.title="["+tok.error.type+"] "+tok.error.explanation+" -> "+tok.error.correction;
+      annotated.appendChild(wrap);
+      errors.push({type:tok.error.type,original:tok.text,correction:tok.error.correction,explanation:tok.error.explanation});
+    }else{annotated.appendChild(document.createTextNode(tok.text));}
+  });
+  omissions.filter(o=>o.after_token_index>=tokens.length-1).forEach(o=>{annotated.appendChild(document.createTextNode(" "));annotated.appendChild(makeOmissionSpan(o));errors.push({type:"O",original:"(missing)",correction:o.text,explanation:o.explanation});});
+  const statsEl=document.getElementById("stats");statsEl.innerHTML="";
+  const counts={};errors.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);
+  if(Object.keys(counts).length===0){statsEl.innerHTML='<div class="stat-pill">No errors found!</div>';}
+  else{
+    statsEl.innerHTML='<div class="stat-pill"><span>'+errors.length+'</span> total errors</div>';
+    Object.entries(counts).forEach(([type,n])=>{const info=ERROR_TYPES[type]||{color:"#aaa",label:type};statsEl.innerHTML+='<div class="stat-pill"><div class="stat-dot" style="background:'+info.color+'"></div><strong>'+n+'</strong> '+info.label+'</div>';});
+  }
+  const listEl=document.getElementById("error-list");listEl.innerHTML="";
+  if(errors.length===0){listEl.innerHTML='<p style="color:var(--text-muted);font-size:.85rem">Great writing!</p>';}
+  else{errors.forEach(e=>{const info=ERROR_TYPES[e.type]||{color:"#aaa",label:e.type};listEl.innerHTML+='<div class="error-card"><div class="type-badge" style="background:'+info.color+'">'+e.type+'</div><div class="err-detail"><div class="err-original">'+escHtml(e.original)+'</div><div class="err-correction" style="color:'+info.color+'">-> '+escHtml(e.correction)+'</div><div class="err-explanation">'+escHtml(e.explanation)+'</div></div></div>';});}
+}
+
+function makeOmissionSpan(o){
+  const info=ERROR_TYPES["O"];
+  const span=document.createElement("span");span.className="token-error";span.style.cssText="color:"+info.color+";border-bottom:2px dashed "+info.color+";";span.title="[O] "+o.explanation;
+  const abbr=document.createElement("span");abbr.className="abbr-tag";abbr.style.color=info.color;abbr.textContent="O";
+  const txt=document.createElement("span");txt.style.cssText="font-style:italic;opacity:.7;font-size:.85em;";txt.textContent="["+o.text+"]";
+  span.appendChild(abbr);span.appendChild(txt);return span;
+}
+function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function setView(view){
+  document.getElementById("placeholder").style.display=view==="placeholder"?"flex":"none";
+  document.getElementById("loader").style.display=view==="loader"?"flex":"none";
+  document.getElementById("error-alert").style.display=view==="error"?"block":"none";
+  document.getElementById("result-box").style.display=view==="result"?"flex":"none";
+}
+function showError(msg){const el=document.getElementById("error-alert");el.textContent="Error: "+msg;setView("error");}
+function toBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});}
+</script>
+</body>
+</html>
