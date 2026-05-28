@@ -68,9 +68,9 @@
 <div class="main">
   <aside class="sidebar">
     <div>
-      <div class="section-label">Anthropic API Key</div>
-      <div class="api-row"><input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off" /></div>
-      <p style="font-size:.72rem;color:var(--text-muted);margin-top:6px;">Your key is never sent anywhere except directly to api.anthropic.com</p>
+      <div class="section-label">DeepSeek API Key</div>
+      <div class="api-row"><input type="password" id="api-key" placeholder="sk-..." autocomplete="off" /></div>
+      <p style="font-size:.72rem;color:var(--text-muted);margin-top:6px;">Your key is never sent anywhere except directly to api.deepseek.com</p>
     </div>
     <div>
       <div class="section-label">Image</div>
@@ -142,7 +142,7 @@ Object.entries(ERROR_TYPES).forEach(([c,i])=>{legendEl.innerHTML+=`<div class="l
 
 const fileInput=document.getElementById("file-input"),dropZone=document.getElementById("drop-zone"),previewImg=document.getElementById("preview-img"),fileNameEl=document.getElementById("file-name"),analyzeBtn=document.getElementById("analyze-btn"),apiKeyEl=document.getElementById("api-key");
 let selectedFile=null;
-const savedKey=localStorage.getItem("anthropic_key");
+const savedKey=localStorage.getItem("deepseek_key");
 if(savedKey)apiKeyEl.value=savedKey;
 apiKeyEl.addEventListener("input",updateBtn);
 function handleFile(f){if(!f||!f.type.startsWith("image/"))return;selectedFile=f;fileNameEl.textContent=f.name;previewImg.src=URL.createObjectURL(f);previewImg.style.display="block";updateBtn();}
@@ -155,15 +155,15 @@ analyzeBtn.addEventListener("click",analyze);
 
 async function analyze(){
   const apiKey=apiKeyEl.value.trim();
-  localStorage.setItem("anthropic_key",apiKey);
+  localStorage.setItem("deepseek_key",apiKey);
   setView("loader");
   try{
     const b64=await toBase64(selectedFile);
-    const body={model:"claude-opus-4-6",max_tokens:4096,system:SP,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:selectedFile.type,data:b64}},{type:"text",text:"Analyze this text for English errors and return the JSON."}]}]};
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(body)});
+    const body={model:"deepseek-chat",max_tokens:4096,system:SP,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:selectedFile.type,data:b64}},{type:"text",text:"Analyze this text for English errors and return the JSON."}]}]};
+    const resp=await fetch("https://api.deepseek.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","Authorization": "Bearer " + apiKey},body:JSON.stringify(body)});
     if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err.error?.message||"HTTP "+resp.status);}
     const data=await resp.json();
-    let raw=data.content[0].text.trim();
+    let raw=data.choices[0].message.content.trim();
     if(raw.startsWith("```")){const lines=raw.split("\n");raw=lines.slice(1,lines[lines.length-1].trim()==="```"?-1:undefined).join("\n");}
     renderResult(JSON.parse(raw));setView("result");
   }catch(err){showError(err.message);}
