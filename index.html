@@ -42,6 +42,9 @@
     @keyframes spin { to { transform:rotate(360deg); } }
     .loader p { color:var(--text-muted);font-size:0.88rem; }
     .result-box { display:none;flex-direction:column;gap:24px; }
+    .result-actions { display:flex;justify-content:flex-end; }
+    .export-btn { background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);cursor:pointer;font-size:0.82rem;font-weight:700;padding:10px 14px;transition:border-color .2s,background .2s; }
+    .export-btn:hover { border-color:var(--accent);background:rgba(92,107,192,.14); }
     .result-title { font-size:0.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px; }
     .annotated-text { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;font-size:1.05rem;line-height:2.4;letter-spacing:.2px; }
     .token-error { position:relative;display:inline;border-radius:3px;padding:0 1px; }
@@ -97,6 +100,7 @@
     <div class="loader" id="loader"><div class="spinner"></div><p>Analyzing image with OpenAI...</p></div>
     <div class="alert" id="error-alert"></div>
     <div class="result-box" id="result-box">
+      <div class="result-actions"><button class="export-btn" id="export-btn">Export marked file</button></div>
       <div><div class="result-title">Annotated Text</div><div class="annotated-text" id="annotated-text"></div></div>
       <div><div class="result-title">Error Summary</div><div class="stats" id="stats"></div></div>
       <div><div class="result-title">Error Details</div><div class="error-list" id="error-list"></div></div>
@@ -140,7 +144,7 @@ Rules:
 const legendEl=document.getElementById("legend");
 Object.entries(ERROR_TYPES).forEach(([c,i])=>{legendEl.innerHTML+=`<div class="legend-item"><div class="legend-chip" style="background:${i.color}">${c}</div><span>${i.label}</span></div>`;});
 
-const fileInput=document.getElementById("file-input"),dropZone=document.getElementById("drop-zone"),previewImg=document.getElementById("preview-img"),fileNameEl=document.getElementById("file-name"),analyzeBtn=document.getElementById("analyze-btn"),apiKeyEl=document.getElementById("api-key");
+const fileInput=document.getElementById("file-input"),dropZone=document.getElementById("drop-zone"),previewImg=document.getElementById("preview-img"),fileNameEl=document.getElementById("file-name"),analyzeBtn=document.getElementById("analyze-btn"),apiKeyEl=document.getElementById("api-key"),exportBtn=document.getElementById("export-btn");
 let selectedFile=null;
 apiKeyEl.addEventListener("input",updateBtn);
 function handleFile(f){if(!f||!f.type.startsWith("image/"))return;selectedFile=f;fileNameEl.textContent=f.name;previewImg.src=URL.createObjectURL(f);previewImg.style.display="block";updateBtn();}
@@ -150,6 +154,7 @@ dropZone.addEventListener("dragover",e=>{e.preventDefault();dropZone.classList.a
 dropZone.addEventListener("dragleave",()=>dropZone.classList.remove("over"));
 dropZone.addEventListener("drop",e=>{e.preventDefault();dropZone.classList.remove("over");handleFile(e.dataTransfer.files[0]);});
 analyzeBtn.addEventListener("click",analyze);
+exportBtn.addEventListener("click",exportMarkedFile);
 
 async function analyze(){
   const apiKey=apiKeyEl.value.trim();
@@ -260,6 +265,25 @@ function renderResult(data){
   const listEl=document.getElementById("error-list");listEl.innerHTML="";
   if(errors.length===0){listEl.innerHTML='<p style="color:var(--text-muted);font-size:.85rem">Great writing!</p>';}
   else{errors.forEach(e=>{const info=ERROR_TYPES[e.type]||{color:"#aaa",label:e.type};listEl.innerHTML+='<div class="error-card"><div class="type-badge" style="background:'+info.color+'">'+e.type+'</div><div class="err-detail"><div class="err-original">'+escHtml(e.original)+'</div><div class="err-correction" style="color:'+info.color+'">-> '+escHtml(e.correction)+'</div><div class="err-explanation">'+escHtml(e.explanation)+'</div></div></div>';});}
+}
+
+function exportMarkedFile(){
+  const annotated=document.getElementById("annotated-text").innerHTML;
+  if(!annotated.trim())return;
+  const stats=document.getElementById("stats").innerHTML;
+  const details=document.getElementById("error-list").innerHTML;
+  const sourceName=selectedFile?.name||"uploaded-image";
+  const legend=Object.entries(ERROR_TYPES).map(([c,i])=>'<div class="legend-item"><span class="legend-chip" style="background:'+i.color+'">'+escHtml(c)+'</span><span>'+escHtml(i.label)+'</span></div>').join("");
+  const html='<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Marked English Correction</title><style>:root{--bg:#f7f8fc;--surface:#fff;--border:#d8dbea;--text:#171923;--muted:#5f6b85}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,system-ui,sans-serif;padding:32px}main{max-width:980px;margin:0 auto}.top{border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:24px}h1{font-size:24px;margin:0 0 6px}.meta{color:var(--muted);font-size:13px}.section{margin:24px 0}.title{font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}.annotated-text{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;font-size:18px;line-height:2.5}.token-error{position:relative;display:inline;border-radius:3px;padding:0 1px}.abbr-tag{position:absolute;top:-1.35em;left:0;font-size:10px;font-weight:800;line-height:1;white-space:nowrap}.stats,.legend{display:flex;flex-wrap:wrap;gap:10px}.stat-pill,.legend-item{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:7px 13px;font-size:13px;display:flex;align-items:center;gap:8px}.stat-dot{width:9px;height:9px;border-radius:50%}.legend-chip,.type-badge{color:#fff;border-radius:5px;font-weight:800;text-align:center}.legend-chip{min-width:32px;padding:3px 7px;font-size:11px}.error-list{display:flex;flex-direction:column;gap:10px}.error-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;gap:14px}.type-badge{width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}.err-original{text-decoration:line-through;color:#6b7280;font-weight:600}.err-correction{font-weight:800;margin-top:2px}.err-explanation{font-size:13px;color:var(--muted);margin-top:3px}@media print{body{background:#fff;padding:16px}.section{break-inside:avoid}}</style></head><body><main><div class="top"><h1>English Error Corrector - Marked File</h1><div class="meta">Source: '+escHtml(sourceName)+' | Exported: '+escHtml(new Date().toLocaleString())+'</div></div><section class="section"><div class="title">Annotated Text</div><div class="annotated-text">'+annotated+'</div></section><section class="section"><div class="title">Error Summary</div><div class="stats">'+stats+'</div></section><section class="section"><div class="title">Error Legend</div><div class="legend">'+legend+'</div></section><section class="section"><div class="title">Error Details</div><div class="error-list">'+details+'</div></section></main></body></html>';
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=(sourceName.replace(/\.[^.]+$/,"")||"marked-correction")+"-marked.html";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function makeOmissionSpan(o){
